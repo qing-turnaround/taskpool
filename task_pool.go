@@ -3,7 +3,6 @@ package pool
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 // 选项模式：用于设置任务池的属性
@@ -44,26 +43,22 @@ func (t task) Run() {
 }
 
 type TaskPool struct {
+	options *PoolOptions
 	// 任务队列
 	taskChan chan task
 	// 任务池的关闭通道
 	closeChan chan struct{}
-	// 当前任务池的任务数量
-	taskCount int
-	mu        sync.RWMutex
 }
 
 // NewTaskPool 创建一个任务池
 func NewTaskPool(options ...func(*PoolOptions)) *TaskPool {
-	// 设置默认值
-	poolOptions := &PoolOptions{
-		poolSize:   10,
-		bufferSize: 100,
-	}
+
+	poolOptions := &PoolOptions{}
 	// 通过选项模式设置任务池的属性
 	for _, option := range options {
 		option(poolOptions)
 	}
+
 	// 创建任务池
 	taskPool := &TaskPool{
 		taskChan:  make(chan task, poolOptions.bufferSize),
@@ -76,14 +71,11 @@ func NewTaskPool(options ...func(*PoolOptions)) *TaskPool {
 			for {
 				select {
 				case task := <-taskPool.taskChan:
-					// 执行任务 任务池的任务数量+1
-					taskPool.addCount()
 					task.Run()
-					// 任务池的任务数量-1
-					taskPool.subCount()
 				case <-taskPool.closeChan:
 					return
 				}
+
 			}
 		}()
 	}
@@ -95,9 +87,11 @@ func NewTaskPool(options ...func(*PoolOptions)) *TaskPool {
 func (t *TaskPool) AddTask(task task, ctx context.Context) error {
 	// 将任务添加到任务队列中
 	select {
+	// select会阻塞， 直到有一个case完成操作
 	case t.taskChan <- task:
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
 	}
 	return nil
 }
@@ -106,29 +100,4 @@ func (t *TaskPool) AddTask(task task, ctx context.Context) error {
 // 请不要重复调用，否则会panic（也可以使用sync.Once，但有时候 我们不应该过度保姆式 设计）
 func (t *TaskPool) Close() {
 	close(t.closeChan)
-}
-
-// Size 获取任务池goroutine的数量
-func (t *TaskPool) PoolSize() int {
-
-	return len(t.taskChan)
-}
-
-// TaskCount 获取任务池的任务数量
-func (t *TaskPool) TaskCount() int {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return t.taskCount
-}
-
-func (t *TaskPool) addCount() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.taskCount++
-}
-
-func (t *TaskPool) subCount() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.taskCount--
 }
