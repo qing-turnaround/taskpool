@@ -3,6 +3,7 @@ package pool
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 // 选项模式：用于设置任务池的属性
@@ -47,6 +48,9 @@ type TaskPool struct {
 	taskChan chan task
 	// 任务池的关闭通道
 	closeChan chan struct{}
+	// 当前任务池的任务数量
+	taskCount int
+	mu        sync.RWMutex
 }
 
 // NewTaskPool 创建一个任务池
@@ -72,7 +76,11 @@ func NewTaskPool(options ...func(*PoolOptions)) *TaskPool {
 			for {
 				select {
 				case task := <-taskPool.taskChan:
+					// 执行任务 任务池的任务数量+1
+					taskPool.addCount()
 					task.Run()
+					// 任务池的任务数量-1
+					taskPool.subCount()
 				case <-taskPool.closeChan:
 					return
 				}
@@ -100,8 +108,27 @@ func (t *TaskPool) Close() {
 	close(t.closeChan)
 }
 
-// Size 获取任务池 队列的大小
-func (t *TaskPool) Size() int {
+// Size 获取任务池goroutine的数量
+func (t *TaskPool) PoolSize() int {
 
 	return len(t.taskChan)
+}
+
+// TaskCount 获取任务池的任务数量
+func (t *TaskPool) TaskCount() int {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.taskCount
+}
+
+func (t *TaskPool) addCount() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.taskCount++
+}
+
+func (t *TaskPool) subCount() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.taskCount--
 }
