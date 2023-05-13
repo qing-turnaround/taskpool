@@ -99,3 +99,9 @@ func (t *TaskPool) AddTask(task task, ctx context.Context) error {
 func (t *TaskPool) Close() {
 	close(t.closeChan)
 }
+
+// Size 获取任务池 队列的大小
+func (t *TaskPool) Size() int {
+
+	return len(t.taskChan)
+}
