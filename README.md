@@ -30,7 +30,7 @@ func main() {
 		pool.WithBufferSize(10))
 
 	// 创建200个任务
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 10000; i++ {
 		// 任务上下文, 10秒超时
 		ctx, _ := context.WithTimeout(context.Background(), 20)
 		// 添加任务
@@ -41,20 +41,18 @@ func main() {
 		}
 	}
 
-	// 等待10秒
-	time.Sleep(time.Second * 10)
 	// 关闭任务池
 	pool.Close()
-	fmt.Println(count)
-
+	fmt.Printf("任务池执行完毕，失败任务数量：%d\n", pool.GetFails())
+	fmt.Printf("任务池执行完毕，结果为：%d\n", count)
 }
 
 
 // 定义任务函数
-func Task() {
+func Task() error {
 	mu.Lock()
 	count++
 	mu.Unlock()
-
+	return nil
 }
 ```
